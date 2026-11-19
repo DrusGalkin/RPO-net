@@ -1,8 +1,9 @@
 package main
 
 import (
-	"fmt"
-	"time"
+	"encoding/json"
+	"log"
+	"sync"
 
 	"github.com/gofiber/fiber/v3"
 	"gopkg.in/mail.v2"
@@ -10,44 +11,72 @@ import (
 
 const PORT = 465
 const SMTP_LINK = "smtp.mail.ru"
-const MAIL_FROM = "твоя почта"
-const MAIL_TO = "почта кому будем отправлять"
-const PASSWORD = "пароль"
+const MAIL_FROM = "sergeym2900@mail.ru"
+const MAIL_TO = "sergeym2900@gmail.com"
+const PASSWORD = "GBzMeEZiDio6KiPVEhVq"
+const MES = "Hello world!"
+
+var (
+	mu       sync.RWMutex
+	lastCode string
+)
 
 func main() {
 	app := fiber.New()
 
-	app.Get("/get_code", func(fiber.Ctx) {
-
-	})
-	app.Post("/confirm", func(fiber.Ctx) {
-
-	})
-
-	for {
-		m := mail.NewMessage()
-		m.SetHeader("From", MAIL_FROM)
-		m.SetHeader("To", MAIL_TO)
-		m.SetHeader("Subject", "HTML-письмо с вложением")
-
-		m.SetBody("text/plain", "Если вы видите этот текст, ваш клиент не поддерживает HTML.")
-		m.AddAlternative("text/html", "<h1>Привет!</h1><p>Это HTML-версия письма.</p>")
-
-		d := mail.NewDialer(
-			SMTP_LINK,
-			PORT,
-			MAIL_FROM,
-			PASSWORD,
-		)
-		d.StartTLSPolicy = mail.MandatoryStartTLS
-
-		if err := d.DialAndSend(m); err != nil {
-			fmt.Println("Ошибка отпавления!", err)
-		} else {
-			fmt.Println("Письмо отправлено!")
+	app.Get("/get_code", func(c fiber.Ctx) error {
+		if err := sendHello(); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"ok":    false,
+				"error": err.Error(),
+			})
 		}
 
-		time.Sleep(60 * time.Second)
-	}
+		mu.Lock()
+		lastCode = MES
+		mu.Unlock()
 
+		return c.JSON(fiber.Map{
+			"ok":      true,
+			"message": MES,
+		})
+	})
+	app.Post("/confirm", func(c fiber.Ctx) error {
+		var req struct {
+			Code string `json:"code"`
+		}
+
+		if err := json.Unmarshal(c.Body(), &req); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"ok":    false,
+				"error": "некорректный JSON",
+			})
+		}
+
+		mu.RLock()
+		expected := lastCode
+		mu.RUnlock()
+
+		valid := expected != "" && req.Code == expected
+
+		return c.JSON(fiber.Map{
+			"ok":    true,
+			"valid": valid,
+		})
+	})
+
+	log.Fatal(app.Listen(":3000"))
+}
+
+func sendHello() error {
+	m := mail.NewMessage()
+	m.SetHeader("From", MAIL_FROM)
+	m.SetHeader("To", MAIL_TO)
+	m.SetHeader("Subject", "Hello")
+	m.SetBody("text/plain", "Hello World!")
+
+	d := mail.NewDialer(SMTP_LINK, PORT, MAIL_FROM, PASSWORD)
+	d.SSL = true
+
+	return d.DialAndSend(m)
 }

@@ -7,6 +7,11 @@ import (
 	"net"
 )
 
+var whitelist = map[string]struct{}{
+	"127.0.0.1":    {},
+	"192.168.0.10": {},
+}
+
 func main() {
 	ln, err := net.Listen("tcp", "127.0.0.1:9000")
 	if err != nil {
@@ -27,6 +32,13 @@ func main() {
 
 func handle(c net.Conn) {
 	defer c.Close()
+
+	ip, _, _ := net.SplitHostPort(c.RemoteAddr().String())
+	if _, exists := whitelist[ip]; !exists {
+		fmt.Println("Доступ запрещён:", ip)
+		return
+	}
+
 	s := bufio.NewScanner(c)
 	for s.Scan() {
 		if _, err := fmt.Fprintln(c, "Запрос на сервер: "+c.LocalAddr().String()+" отправлен"); err != nil {

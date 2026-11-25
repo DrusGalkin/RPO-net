@@ -1,31 +1,23 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
+	"io"
 	"log"
-	"net"
+	"net/http"
 )
 
 func main() {
-	c, err := net.Dial("tcp", "127.0.0.1:9000")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer c.Close()
+	fmt.Println("Клиент отправляет запрос...")
 
-	if _, err := fmt.Fprintln(
-		c,
-		c.LocalAddr(),
-	); err != nil {
-		log.Print(err)
-		return
-	}
-
-	msg, err := bufio.NewReader(c).ReadString('\n')
+	resp, err := http.Get("http://127.0.0.1:9000/")
 	if err != nil {
-		log.Print(err)
-		return
+		log.Fatal("Ошибка подключения:", err)
 	}
-	fmt.Print(msg)
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	fmt.Println("Статус:", resp.Status)
+	fmt.Println("Ответ:", string(body))
 }
